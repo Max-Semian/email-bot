@@ -1,0 +1,11 @@
+# Список адресов получателей
+# Форматы:
+#   email1@example.com;email2@example.com   — несколько адресов через ;
+#   email@example.com;Имя                   — адрес + имя через ;
+#   email@example.com                       — по одному на строку
+# Строки начинающиеся с # игнорируются
+
+alice@example.com;Алиса
+bob@example.com;Боб
+charlie@example.com
+diana@example.com;Диана;extra_ignored_column

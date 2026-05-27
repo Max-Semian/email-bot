@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Email</title>
+  <style>
+    body {
+      margin: 0;
+      padding: 0;
+      background-color: #f4f4f4;
+      font-family: Arial, sans-serif;
+    }
+    .wrapper {
+      max-width: 600px;
+      margin: 40px auto;
+      background: #ffffff;
+      border-radius: 8px;
+      overflow: hidden;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+    }
+    .header {
+      background-color: #4285F4;
+      padding: 32px 40px;
+      text-align: center;
+    }
+    .header h1 {
+      color: #ffffff;
+      margin: 0;
+      font-size: 24px;
+      letter-spacing: 0.5px;
+    }
+    .body {
+      padding: 36px 40px;
+      color: #333333;
+      line-height: 1.7;
+      font-size: 15px;
+    }
+    .body h2 {
+      color: #4285F4;
+      margin-top: 0;
+    }
+    .button {
+      display: inline-block;
+      margin: 24px 0;
+      padding: 14px 32px;
+      background-color: #4285F4;
+      color: #ffffff !important;
+      text-decoration: none;
+      border-radius: 4px;
+      font-size: 15px;
+      font-weight: bold;
+    }
+    .footer {
+      background-color: #f4f4f4;
+      padding: 20px 40px;
+      text-align: center;
+      font-size: 12px;
+      color: #999999;
+    }
+    .footer a {
+      color: #999999;
+    }
+  </style>
+</head>
+<body>
+  <div class="wrapper">
+    <div class="header">
+      <h1>Добро пожаловать!</h1>
+    </div>
+    <div class="body">
+      <h2>Привет${name and ', ' + name or ''}!</h2>
+      <!-- Используйте $name для подстановки имени, $email — для адреса -->
+      <p>
+        Это письмо отправлено на адрес <strong>$email</strong>.
+      </p>
+      <p>
+        Вставьте сюда основной текст вашего письма. Вы можете использовать
+        любую HTML-вёрстку, картинки, ссылки и стили.
+      </p>
+      <p>
+        <a class="button" href="https://example.com">Перейти на сайт</a>
+      </p>
+      <p>
+        С уважением,<br>
+        <strong>Ваша компания</strong>
+      </p>
+    </div>
+    <div class="footer">
+      <p>
+        Вы получили это письмо, так как подписались на рассылку.<br>
+        <a href="https://example.com/unsubscribe">Отписаться</a>
+      </p>
+    </div>
+  </div>
+</body>
+</html>
