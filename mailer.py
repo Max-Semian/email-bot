@@ -289,9 +289,9 @@ def _build_message(
     msg["MIME-Version"] = "1.0"
 
     # List-Unsubscribe (helps avoid spam / unsubscribe button in Gmail)
-    unsub = _extract_unsubscribe(html_body)
-    if unsub:
-        msg["List-Unsubscribe"] = f"<{unsub}>"
+    unsub = _extract_unsubscribe(html_body) or f"mailto:{sender_email}?subject=unsubscribe"
+    msg["List-Unsubscribe"] = f"<{unsub}>"
+    if unsub.startswith(("http://", "https://")):
         msg["List-Unsubscribe-Post"] = "List-Unsubscribe=One-Click"
 
     # Plain text first, then HTML (mail clients prefer the last matching part)
