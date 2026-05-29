@@ -14,6 +14,7 @@ from email.utils import formatdate, formataddr
 from html.parser import HTMLParser
 from string import Template
 from typing import Generator
+from urllib.parse import quote
 
 
 CYRILLIC_RE = re.compile(r"[а-яёА-ЯЁ]")
@@ -73,6 +74,7 @@ def normalize_template(raw_template: str) -> tuple[str, list[str]]:
     template = _strip_snapshot_headers(template)
     template = _remove_unsafe_local_references(template)
     template = _normalize_email_metadata(template)
+    template = _remove_hrefless_anchors(template)
     _validate_clean_html(template)
     if contains_cyrillic(template):
         raise TemplateError("Template contains Cyrillic text. Use English-only email content.")
@@ -169,6 +171,15 @@ def _normalize_email_metadata(template: str) -> str:
     return template
 
 
+def _remove_hrefless_anchors(template: str) -> str:
+    return re.sub(
+        r"<a\b(?![^>]*\bhref=)[^>]*>(.*?)</a>",
+        r"\1",
+        template,
+        flags=re.IGNORECASE | re.DOTALL,
+    )
+
+
 def _validate_clean_html(template: str) -> None:
     lowered = template[:20000].lower()
     forbidden = (
@@ -260,6 +271,35 @@ def _extract_unsubscribe(html_str: str) -> str:
     return m.group(1) if m else ""
 
 
+def _unsubscribe_mailto(sender_email: str) -> str:
+    return f"mailto:{sender_email}?subject={quote('unsubscribe')}"
+
+
+def _ensure_compliance_footer(html_body: str, sender_email: str, sender_name: str) -> str:
+    if "unsubscribe" in html_body.lower():
+        return html_body
+
+    brand = sender_name or sender_email
+    unsubscribe_url = _unsubscribe_mailto(sender_email)
+    footer = f"""
+<div style="background:#f6f6f6;color:#6b6b6b;font-family:Arial,Helvetica,sans-serif;font-size:12px;line-height:18px;text-align:center;padding:16px 20px;">
+  You are receiving this email because you previously attended or subscribed to {brand} updates.<br>
+  To stop receiving these emails, reply to this message or <a href="{unsubscribe_url}" style="color:#6b6b6b;text-decoration:underline;">unsubscribe</a>.
+</div>
+""".strip()
+
+    if re.search(r"</body\s*>", html_body, flags=re.IGNORECASE):
+        return re.sub(r"</body\s*>", footer + "\n</body>", html_body, count=1, flags=re.IGNORECASE)
+    return html_body + "\n" + footer
+
+
+def _list_id(sender_email: str, sender_name: str) -> str:
+    domain = sender_email.split("@")[-1].lower()
+    name = sender_name or sender_email.split("@")[0]
+    slug = re.sub(r"[^a-z0-9]+", "-", name.lower()).strip("-") or "newsletter"
+    return f"{name} <{slug}.{domain}>"
+
+
 # ─── Sending ────────────────────────────────────────────────────────────────
 
 def _build_message(
@@ -270,6 +310,7 @@ def _build_message(
     html_body: str,
 ) -> MIMEMultipart:
     """Build a RFC-compliant multipart/alternative message."""
+    html_body = _ensure_compliance_footer(html_body, sender_email, sender_name)
     msg = MIMEMultipart("alternative")
 
     # Required headers
@@ -278,6 +319,7 @@ def _build_message(
 
     # Encoded From / To (RFC 2047 handles non-ASCII names)
     msg["From"] = formataddr((sender_name, sender_email)) if sender_name else sender_email
+    msg["Reply-To"] = sender_email
     to_name = recipient.get("name", "")
     if contains_cyrillic(to_name):
         to_name = ""
@@ -286,10 +328,11 @@ def _build_message(
     if contains_cyrillic(subject):
         raise TemplateError("Subject contains Cyrillic text. Use an English-only subject.")
     msg["Subject"] = subject
-    msg["MIME-Version"] = "1.0"
+    msg["List-ID"] = _list_id(sender_email, sender_name)
+    msg["Precedence"] = "bulk"
 
     # List-Unsubscribe (helps avoid spam / unsubscribe button in Gmail)
-    unsub = _extract_unsubscribe(html_body) or f"mailto:{sender_email}?subject=unsubscribe"
+    unsub = _extract_unsubscribe(html_body) or _unsubscribe_mailto(sender_email)
     msg["List-Unsubscribe"] = f"<{unsub}>"
     if unsub.startswith(("http://", "https://")):
         msg["List-Unsubscribe-Post"] = "List-Unsubscribe=One-Click"
