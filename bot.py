@@ -103,7 +103,14 @@ async def cmd_send(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 
 
 async def got_subject(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
-    ctx.user_data[KEY_SUBJECT] = update.message.text.strip()
+    subject = update.message.text.strip()
+    if mailer.contains_cyrillic(subject):
+        await update.message.reply_text(
+            "Тема письма содержит кириллицу. Введите тему на английском, например: Bass2Face Promo Code"
+        )
+        return SUBJECT
+
+    ctx.user_data[KEY_SUBJECT] = subject
     await update.message.reply_text(
         "Отправьте файл с адресами получателей (.txt).\n"
         "Формат: `адрес@example.com;Имя` — по одному на строку, или через `;`",

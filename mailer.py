@@ -16,6 +16,9 @@ from string import Template
 from typing import Generator
 
 
+CYRILLIC_RE = re.compile(r"[а-яёА-ЯЁ]")
+
+
 # ─── Parsing ────────────────────────────────────────────────────────────────
 
 def parse_addresses(text: str) -> list[dict]:
@@ -42,6 +45,10 @@ def parse_addresses(text: str) -> list[dict]:
     return recipients
 
 
+def contains_cyrillic(text: str) -> bool:
+    return bool(CYRILLIC_RE.search(text))
+
+
 # ─── Template ───────────────────────────────────────────────────────────────
 
 class TemplateError(ValueError):
@@ -66,6 +73,8 @@ def normalize_template(raw_template: str) -> tuple[str, list[str]]:
     template = _strip_snapshot_headers(template)
     template = _remove_unsafe_local_references(template)
     _validate_clean_html(template)
+    if contains_cyrillic(template):
+        raise TemplateError("Template contains Cyrillic text. Use English-only email content.")
     return template, warnings
 
 
@@ -174,6 +183,8 @@ def _validate_clean_html(template: str) -> None:
 def render(template_str: str, recipient: dict) -> str:
     """Substitute $email, $name, $greeting placeholders in template."""
     name = recipient.get("name", "")
+    if contains_cyrillic(name):
+        name = ""
     greeting = f"Hello, {name}" if name else "Hello"
     return Template(template_str).safe_substitute(
         email=recipient["email"],
@@ -250,8 +261,12 @@ def _build_message(
     # Encoded From / To (RFC 2047 handles non-ASCII names)
     msg["From"] = formataddr((sender_name, sender_email)) if sender_name else sender_email
     to_name = recipient.get("name", "")
+    if contains_cyrillic(to_name):
+        to_name = ""
     msg["To"] = formataddr((to_name, recipient["email"])) if to_name else recipient["email"]
 
+    if contains_cyrillic(subject):
+        raise TemplateError("Subject contains Cyrillic text. Use an English-only subject.")
     msg["Subject"] = subject
     msg["MIME-Version"] = "1.0"
 

@@ -25,6 +25,10 @@ def main():
     app_password = os.getenv("GMAIL_APP_PASSWORD")
     sender_name = os.getenv("SENDER_NAME", "")
 
+    if mailer.contains_cyrillic(args.subject):
+        print("[ERROR] Subject contains Cyrillic text. Use an English-only subject.")
+        sys.exit(1)
+
     if not sender_email or not app_password:
         print("[ERROR] GMAIL_USER and GMAIL_APP_PASSWORD must be set in .env")
         sys.exit(1)
