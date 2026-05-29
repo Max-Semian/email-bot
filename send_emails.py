@@ -64,7 +64,8 @@ def main():
     for r in mailer.send_all(recipients, template_str, args.subject,
                              sender_email, app_password, sender_name, args.delay):
         mark = "OK" if r["ok"] else f"FAIL — {r.get('error', '')}"
-        print(f"[{r['index']}/{r['total']}] {r['email']} ... {mark}")
+        message_id = f" message_id={r.get('message_id')}" if r.get("message_id") else ""
+        print(f"[{r['index']}/{r['total']}] {r['email']} ... {mark}{message_id}")
         if r["ok"]:
             sent += 1
         else:

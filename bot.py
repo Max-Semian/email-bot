@@ -9,7 +9,6 @@ Commands:
 import asyncio
 import logging
 import os
-from io import StringIO
 
 from dotenv import load_dotenv
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
@@ -223,6 +222,7 @@ async def got_confirm(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 
     sent = failed = 0
     errors: list[str] = []
+    accepted_ids: list[str] = []
     update_every = max(1, len(recipients) // 10)  # update progress ~10 times
 
     # Run blocking IO in a thread pool to not block the event loop
@@ -256,8 +256,11 @@ async def got_confirm(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     for r in results:
         if r["ok"]:
             sent += 1
+            if r.get("message_id"):
+                accepted_ids.append(r["message_id"])
         else:
             failed += 1
+            logger.warning("Email delivery failed for %s: %s", r["email"], r.get("error", "?"))
             errors.append(f"`{r['email']}`: {r.get('error', '?')}")
         # Update progress periodically
         idx = r["index"]
@@ -271,7 +274,10 @@ async def got_confirm(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
             except Exception:
                 pass  # ignore "message not modified" errors
 
-    summary = f"✅ Рассылка завершена!\n\nОтправлено: *{sent}*\nОшибок: *{failed}*"
+    summary = f"✅ Рассылка завершена!\n\nПринято Gmail SMTP: *{sent}*\nОшибок SMTP: *{failed}*"
+    if accepted_ids:
+        summary += f"\n\nMessage-ID последнего письма: `{accepted_ids[-1]}`"
+        summary += "\nЕсли после этого пришёл bounce/undelivered, пришлите текст bounce — это уже отказ после принятия SMTP."
     if errors:
         error_list = "\n".join(errors[:10])
         if len(errors) > 10:

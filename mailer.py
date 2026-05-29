@@ -367,10 +367,29 @@ def send_all(
             html = render(template_str, recipient)
             msg = _build_message(sender_email, sender_name, recipient, subject, html)
             try:
-                server.sendmail(sender_email, recipient["email"], msg.as_string())
-                yield {"index": i, "total": total, "email": recipient["email"], "ok": True}
+                refused = server.sendmail(sender_email, recipient["email"], msg.as_string())
+                if refused:
+                    yield {
+                        "index": i,
+                        "total": total,
+                        "email": recipient["email"],
+                        "ok": False,
+                        "error": f"SMTP refused recipient: {refused}",
+                        "message_id": msg["Message-ID"],
+                    }
+                else:
+                    yield {
+                        "index": i,
+                        "total": total,
+                        "email": recipient["email"],
+                        "ok": True,
+                        "message_id": msg["Message-ID"],
+                    }
+            except smtplib.SMTPResponseException as e:
+                error = f"SMTP {e.smtp_code}: {e.smtp_error.decode('utf-8', errors='replace') if isinstance(e.smtp_error, bytes) else e.smtp_error}"
+                yield {"index": i, "total": total, "email": recipient["email"], "ok": False, "error": error, "message_id": msg["Message-ID"]}
             except Exception as e:
-                yield {"index": i, "total": total, "email": recipient["email"], "ok": False, "error": str(e)}
+                yield {"index": i, "total": total, "email": recipient["email"], "ok": False, "error": str(e), "message_id": msg["Message-ID"]}
 
             if i < total and delay > 0:
                 time.sleep(delay)
