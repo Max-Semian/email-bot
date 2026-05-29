@@ -72,6 +72,7 @@ def normalize_template(raw_template: str) -> tuple[str, list[str]]:
 
     template = _strip_snapshot_headers(template)
     template = _remove_unsafe_local_references(template)
+    template = _normalize_email_metadata(template)
     _validate_clean_html(template)
     if contains_cyrillic(template):
         raise TemplateError("Template contains Cyrillic text. Use English-only email content.")
@@ -161,6 +162,13 @@ def _remove_unsafe_local_references(template: str) -> str:
     return template
 
 
+def _normalize_email_metadata(template: str) -> str:
+    template = re.sub(r"\blang=[\"']ru[\"']", 'lang="en"', template, flags=re.IGNORECASE)
+    template = re.sub(r"<title>.*?</title>", "<title>Bass2Face Promo Code</title>", template, flags=re.IGNORECASE | re.DOTALL)
+    template = re.sub(r"<link\b(?=[^>]*\brel=[\"']stylesheet[\"'])(?![^>]*\bhref=)[^>]*>", "", template, flags=re.IGNORECASE)
+    return template
+
+
 def _validate_clean_html(template: str) -> None:
     lowered = template[:20000].lower()
     forbidden = (
@@ -222,9 +230,19 @@ class _StripHTML(HTMLParser):
 
     def result(self) -> str:
         text = "".join(self._buf)
-        text = re.sub(r" {2,}", " ", text)
-        text = re.sub(r"\n{3,}", "\n\n", text)
-        return text.strip()
+        text = text.replace("\xa0", " ")
+        lines = [re.sub(r"\s+", " ", line).strip() for line in text.splitlines()]
+        compact: list[str] = []
+        previous_blank = False
+        for line in lines:
+            if not line:
+                if not previous_blank:
+                    compact.append("")
+                previous_blank = True
+            else:
+                compact.append(line)
+                previous_blank = False
+        return "\n".join(compact).strip()
 
 
 def html_to_text(html_str: str) -> str:
