@@ -32,6 +32,36 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+
+def _admin_ids() -> set[int]:
+    """Return allowed Telegram user IDs from ADMIN_IDS env var (comma-separated)."""
+    raw = os.getenv("ADMIN_IDS", "")
+    if not raw.strip():
+        return set()  # empty = no restriction
+    return {int(x.strip()) for x in raw.split(",") if x.strip().isdigit()}
+
+
+def admin_only(func):
+    """Decorator: reject non-admin users when ADMIN_IDS is set."""
+    import functools
+
+    @functools.wraps(func)
+    async def wrapper(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+        admins = _admin_ids()
+        user_id = (
+            update.effective_user.id if update.effective_user else None
+        )
+        if admins and user_id not in admins:
+            if update.message:
+                await update.message.reply_text("⛔ Доступ запрещён.")
+            elif update.callback_query:
+                await update.callback_query.answer("⛔ Доступ запрещён.", show_alert=True)
+            return ConversationHandler.END
+        return await func(update, ctx)
+
+    return wrapper
+
+
 # Conversation states
 SUBJECT, ADDRESSES, TEMPLATE, CONFIRM = range(4)
 
@@ -56,6 +86,7 @@ def _delay() -> float:
 
 # ─── Handlers ───────────────────────────────────────────────────────────────
 
+@admin_only
 async def cmd_start(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         "Привет! Я бот для email-рассылки через Gmail.\n\n"
@@ -65,6 +96,7 @@ async def cmd_start(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     )
 
 
+@admin_only
 async def cmd_send(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("Введите *тему письма*:", parse_mode=ParseMode.MARKDOWN)
     return SUBJECT
