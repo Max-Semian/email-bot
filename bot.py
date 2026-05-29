@@ -143,7 +143,18 @@ async def got_template(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 
     file = await doc.get_file()
     raw_bytes = await file.download_as_bytearray()
-    template_str = raw_bytes.decode("utf-8", errors="replace")
+    raw_template = raw_bytes.decode("utf-8", errors="replace")
+    try:
+        template_str, warnings = mailer.normalize_template(raw_template)
+    except mailer.TemplateError as e:
+        await update.message.reply_text(
+            "Шаблон не подходит для рассылки:\n"
+            f"{e}\n\n"
+            "Нужно отправить чистый HTML-файл. Не используйте сохранение страницы "
+            "как Webpage Complete / .mht / .mhtml; картинки должны быть по https:// URL."
+        )
+        return TEMPLATE
+
     ctx.user_data[KEY_TEMPLATE] = template_str
 
     recipients = ctx.user_data[KEY_ADDRESSES]
@@ -161,12 +172,17 @@ async def got_template(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
             InlineKeyboardButton("❌ Отмена", callback_data="cancel"),
         ]
     ])
+    warning_text = ""
+    if warnings:
+        warning_text = "\n\n⚠️ " + "\n".join(warnings)
+
     await update.message.reply_text(
         f"*Подтверждение рассылки*\n\n"
         f"📧 Отправитель: `{sender_email}`\n"
         f"📝 Тема: *{subject}*\n"
         f"👥 Получателей: *{len(recipients)}*\n\n"
-        f"{preview}",
+        f"{preview}"
+        f"{warning_text}",
         parse_mode=ParseMode.MARKDOWN,
         reply_markup=keyboard,
     )

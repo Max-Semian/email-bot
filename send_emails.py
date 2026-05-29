@@ -37,11 +37,17 @@ def main():
             sys.exit(1)
 
     recipients = mailer.parse_addresses(addr_path.read_text(encoding="utf-8"))
-    template_str = tmpl_path.read_text(encoding="utf-8")
+    try:
+        template_str, warnings = mailer.normalize_template(tmpl_path.read_text(encoding="utf-8"))
+    except mailer.TemplateError as e:
+        print(f"[ERROR] Bad template: {e}")
+        sys.exit(1)
 
     print(f"Sender    : {sender_email}")
     print(f"Subject   : {args.subject}")
     print(f"Recipients: {len(recipients)}")
+    for warning in warnings:
+        print(f"[WARN] {warning}")
     print("-" * 40)
 
     if args.dry_run:

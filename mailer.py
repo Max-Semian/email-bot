@@ -1,13 +1,15 @@
 """Core email sending logic (used by both bot.py and send_emails.py)."""
 
+import quopri
 import re
 import smtplib
 import ssl
 import time
 import uuid
-from email.headerregistry import Address
+from email import policy
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
+from email.parser import Parser
 from email.utils import formatdate, formataddr
 from html.parser import HTMLParser
 from string import Template
@@ -41,6 +43,133 @@ def parse_addresses(text: str) -> list[dict]:
 
 
 # ─── Template ───────────────────────────────────────────────────────────────
+
+class TemplateError(ValueError):
+    pass
+
+
+def normalize_template(raw_template: str) -> tuple[str, list[str]]:
+    """Return clean HTML from a regular HTML file or an MHTML/raw MIME export."""
+    warnings: list[str] = []
+    template = raw_template.lstrip("\ufeff").strip()
+
+    if _looks_like_mhtml(template):
+        extracted = _extract_html_from_mhtml(template)
+        if not extracted:
+            raise TemplateError(
+                "Template looks like MHTML/raw MIME, but no text/html part was found. "
+                "Please upload a clean .html file, not 'Webpage, Complete' or .mht/.mhtml."
+            )
+        template = extracted.strip()
+        warnings.append("Extracted the HTML part from an MHTML/raw MIME file.")
+
+    template = _strip_snapshot_headers(template)
+    template = _remove_unsafe_local_references(template)
+    _validate_clean_html(template)
+    return template, warnings
+
+
+def _looks_like_mhtml(text: str) -> bool:
+    head = text[:8000].lower()
+    return (
+        "multipart/related" in head
+        or "snapshot-content-location:" in head
+        or "content-location: file://" in head
+        or "content-transfer-encoding: quoted-printable" in head
+    )
+
+
+def _extract_html_from_mhtml(text: str) -> str:
+    parsed = Parser(policy=policy.default).parsestr(text)
+    if parsed.is_multipart():
+        for part in parsed.walk():
+            if part.get_content_type() == "text/html":
+                payload = part.get_payload(decode=True)
+                if payload is not None:
+                    charset = part.get_content_charset() or "utf-8"
+                    return payload.decode(charset, errors="replace")
+                return part.get_content()
+
+    boundary_match = re.search(
+        r'boundary=(?:"([^"]+)"|([^;\s]+))',
+        text,
+        re.IGNORECASE,
+    )
+    if not boundary_match:
+        return _extract_single_quoted_printable_html(text)
+
+    boundary = boundary_match.group(1) or boundary_match.group(2)
+    parts = re.split(rf"(?:\r?\n|^)--{re.escape(boundary)}(?:--)?\s*", text)
+    for part in parts:
+        if re.search(r"(?im)^Content-Type:\s*text/html\b", part):
+            headers, body = _split_mime_part(part)
+            if re.search(r"(?im)^Content-Transfer-Encoding:\s*quoted-printable\b", headers):
+                body = quopri.decodestring(body.encode("utf-8", errors="replace")).decode(
+                    "utf-8", errors="replace"
+                )
+            return body
+
+    return ""
+
+
+def _extract_single_quoted_printable_html(text: str) -> str:
+    headers, body = _split_mime_part(text)
+    if "text/html" not in headers.lower():
+        return ""
+    if "quoted-printable" in headers.lower():
+        return quopri.decodestring(body.encode("utf-8", errors="replace")).decode(
+            "utf-8", errors="replace"
+        )
+    return body
+
+
+def _split_mime_part(text: str) -> tuple[str, str]:
+    match = re.search(r"\r?\n\r?\n", text)
+    if not match:
+        return text, ""
+    return text[:match.start()], text[match.end():]
+
+
+def _strip_snapshot_headers(template: str) -> str:
+    template = re.sub(r"(?im)^\s*(From:\s*)?Snapshot-Content-Location:.*$", "", template)
+    template = re.sub(r"(?im)^\s*Content-Location:\s*file://.*$", "", template)
+    return template.strip()
+
+
+def _remove_unsafe_local_references(template: str) -> str:
+    template = re.sub(
+        r"<img\b[^>]*\s(?:src|data-src)=[\"'](?:cid:|file:)[^\"']*[\"'][^>]*>",
+        "",
+        template,
+        flags=re.IGNORECASE,
+    )
+    template = re.sub(
+        r"\s(?:src|href|data-src)=[\"'](?:cid:|file:)[^\"']*[\"']",
+        "",
+        template,
+        flags=re.IGNORECASE,
+    )
+    return template
+
+
+def _validate_clean_html(template: str) -> None:
+    lowered = template[:20000].lower()
+    forbidden = (
+        "snapshot-content-location:",
+        "content-transfer-encoding:",
+        "multipartboundary",
+        "multipart/related",
+        "file://",
+        "------multipartboundary",
+    )
+    if any(marker in lowered for marker in forbidden):
+        raise TemplateError(
+            "Template still contains raw MIME headers, local file links, or embedded parts. "
+            "Export/send a clean HTML file and use public https:// image URLs."
+        )
+
+    if "<html" not in lowered and "<body" not in lowered and "<table" not in lowered:
+        raise TemplateError("Template does not look like HTML. Please upload an .html template.")
 
 def render(template_str: str, recipient: dict) -> str:
     """Substitute $email, $name, $greeting placeholders in template."""
