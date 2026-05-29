@@ -45,7 +45,7 @@ def parse_addresses(text: str) -> list[dict]:
 def render(template_str: str, recipient: dict) -> str:
     """Substitute $email, $name, $greeting placeholders in template."""
     name = recipient.get("name", "")
-    greeting = f"Привет, {name}" if name else "Привет"
+    greeting = f"Hello, {name}" if name else "Hello"
     return Template(template_str).safe_substitute(
         email=recipient["email"],
         name=name,
