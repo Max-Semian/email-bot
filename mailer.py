@@ -315,7 +315,8 @@ def _build_message(
 
     # Required headers
     msg["Date"] = formatdate(localtime=False)
-    msg["Message-ID"] = f"<{uuid.uuid4()}@{sender_email.split('@')[-1]}>"
+    sender_domain = sender_email.split("@")[-1].lower()
+    msg["Message-ID"] = f"<{uuid.uuid4()}@{sender_domain}>"
 
     # Encoded From / To (RFC 2047 handles non-ASCII names)
     msg["From"] = formataddr((sender_name, sender_email)) if sender_name else sender_email
